@@ -1,0 +1,23 @@
+{
+  "name": "github-integration",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node --watch app.js",
+    "migrate": "node-pg-migrate -c migration-config.js",
+    "migrate:up": "node-pg-migrate up -c migration-config.js",
+    "migrate:down": "node-pg-migrate down -c migration-config.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "node-pg-migrate": "^8.0.0"
+  }
+}
