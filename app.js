@@ -1,7 +1,9 @@
 require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
-const { Pool } = require('pg');
+const pool = require('./db');
+const refreshToken = require('./utils/refreshToken');
+const githubTokenMiddleware = require('./middleware/githubToken');
 
 const app = express();
 app.use(express.json());
@@ -12,32 +14,12 @@ app.use(cors({
   credentials: true
 }));
 
-// PostgreSQL pool setup
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
-
-// Test database connection
-pool.connect()
-  .then(client => {
-    console.log('Connected to PostgreSQL');
-    client.release();
-  })
-  .catch(err => console.error('Connection error', err.stack));
-
-// Simple route
 app.post('/', async (req, res) => {
-  const body = req.body;
+  const { code } = req.body;
 
-  if (!body || !body.code) {
+  if (!code) {
     return res.status(400).json({ error: 'Code is required' });
   }
-
-  const code = req.body.code;
 
   try {
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
@@ -49,21 +31,91 @@ app.post('/', async (req, res) => {
       body: JSON.stringify({
         client_id: process.env.CLIENT_ID,
         client_secret: process.env.CLIENT_SECRET,
-        code: code
+        code
       })
     });
 
     const tokenData = await tokenResponse.json();
 
-    if(!tokenData.access_token) {
+    if (!tokenData.access_token) {
       throw new Error('Failed to retrieve access token');
     }
 
+    const insertQuery = `
+      INSERT INTO token (
+        access_token,
+        expires_in,
+        refresh_token,
+        refresh_token_expires_in,
+        scope,
+        token_type
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id
+    `;
+
+    const insertValues = [
+      tokenData.access_token,
+      tokenData.expires_in,
+      tokenData.refresh_token,
+      tokenData.refresh_token_expires_in,
+      tokenData.scope || '',
+      tokenData.token_type
+    ];
+
+    await pool.query(insertQuery, insertValues);
     res.json({ receivedToken: tokenData });
+
   } catch (error) {
     console.error('Error fetching access token:', error);
     res.status(500).json({ error: 'Failed to fetch access token' });
-  };
+  }
+});
+
+app.get('/user', githubTokenMiddleware, async (req, res) => {
+  try {
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${req.githubAccessToken}`,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+app.get('/repos', githubTokenMiddleware, async (req, res) => {
+  try {
+    const response = await fetch(`https://api.github.com/users/${'PedroYanezE'}/repos`, {
+      headers: {
+        'Authorization': `Bearer ${req.githubAccessToken}`,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    res.json(data.map(d => ({
+      id: d.id,
+      name: d.name,
+      owner: d.owner,
+    })));
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
 });
 
 const port = 3000;
