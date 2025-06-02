@@ -118,6 +118,49 @@ app.get('/repos', githubTokenMiddleware, async (req, res) => {
   }
 });
 
+app.get('/prs', githubTokenMiddleware, async (req, res) => {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${'PedroYanezE'}/${'github-api-test'}/pulls`, {
+      headers: {
+        'Authorization': `Bearer ${req.githubAccessToken}`,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    res.json(data);
+  } catch (error) {
+    throw new Error(`Couldn't retrieve requested data`);
+  }
+});
+
+app.get('/prs/:id', githubTokenMiddleware, async (req, res) => {
+  try {
+    const response = await fetch(`https://api.github.com/repos/PedroYanezE/github-api-test/pulls/${req.params.id}`, {
+      headers: {
+        'Authorization': `Bearer ${req.githubAccessToken}`,
+        'Accept': 'application/vnd.github.v3.diff'
+      }
+    });
+
+    if (!response.ok) {
+      res.sendStatus(400);
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.text();
+    res.send(data);
+  } catch (error) {
+    console.error(error);
+    res.sendStatus(400);
+  }
+});
+
 const port = 3000;
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
